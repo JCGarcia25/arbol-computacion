@@ -12,6 +12,7 @@ app = FastAPI()
 # Cargar modelo entrenado
 modelo_interes = joblib.load("model/modelo_arbol_interes_inscribir_puntuacion.pkl")
 modelo_rango = joblib.load("model/modelo_arbol_rango_pagar.pkl")
+modelo_area_interes = joblib.load("model/modelo_arbol_area_interes_agrupada.pkl")
 
 class EntradaModelo(BaseModel):
     sexo: str
@@ -45,16 +46,26 @@ def predecir(data: EntradaModelo):
         return {"codigo": resultado_int, "descripcion": resultado_texto}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/predecir-area")
+def predecir(data: EntradaModelo):
+    try:
+        entrada_df = pd.DataFrame([data.dict()])
+        resultado = predecir_desde_datos(entrada_df, modelo_area_interes)
+
+        return {"codigo": resultado, "descripcion": resultado}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ui", response_class=HTMLResponse)
 def get_ui():
     return HTMLResponse("""
 <!DOCTYPE html>
-<html lang=\"es\">
+<html lang="es">
 <head>
-    <meta charset=\"UTF-8\">
-    <title>Predicción de Interés y Rango</title>
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta charset="UTF-8">
+    <title>Predicción de Interés, Rango y Área de Interés</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: Arial, sans-serif; background: #f4f6f8; padding: 2rem; }
         .container { max-width: 600px; background: white; padding: 2rem; margin: auto; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -64,49 +75,51 @@ def get_ui():
         button { margin-top: 1.5rem; width: 100%; padding: 0.75rem; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
         .btn-interes { background-color: #4CAF50; color: white; }
         .btn-rango { background-color: #2196F3; color: white; }
+        .btn-area { background-color: #FF9800; color: white; }
         .resultado { margin-top: 1.5rem; padding: 1rem; background: #e3f2fd; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
-<div class=\"container\">
+<div class="container">
     <h2>Predicción</h2>
-    <label for=\"sexo\">Sexo</label>
-    <select id=\"sexo\">
-        <option value=\"masculino\">Masculino</option>
-        <option value=\"femenino\">Femenino</option>
+    <label for="sexo">Sexo</label>
+    <select id="sexo">
+        <option value="masculino">Masculino</option>
+        <option value="femenino">Femenino</option>
     </select>
 
-    <label for=\"edad\">Edad</label>
-    <input type=\"text\" id=\"edad\" placeholder=\"Ej: 26 a 30 años\">
+    <label for="edad">Edad</label>
+    <input type="text" id="edad" placeholder="Ej: 26 a 30 años">
 
-    <label for=\"ocupacion\">Ocupación</label>
-    <input type=\"text\" id=\"ocupacion\">
+    <label for="ocupacion">Ocupación</label>
+    <input type="text" id="ocupacion">
 
-    <label for=\"campo\">Campo</label>
-    <input type=\"text\" id=\"campo\">
+    <label for="campo">Campo</label>
+    <input type="text" id="campo">
 
-    <label for=\"competencias\">Competencias</label>
-    <textarea id=\"competencias\"></textarea>
+    <label for="competencias">Competencias</label>
+    <textarea id="competencias"></textarea>
 
-    <label for=\"egresado\">¿Egresado Unillanos?</label>
-    <select id=\"egresado\">
-        <option value=\"Sí\">Sí</option>
-        <option value=\"No\">No</option>
+    <label for="egresado">¿Egresado Unillanos?</label>
+    <select id="egresado">
+        <option value="Sí">Sí</option>
+        <option value="No">No</option>
     </select>
 
-    <label for=\"titulo\">Título</label>
-    <input type=\"text\" id=\"titulo\">
+    <label for="titulo">Título</label>
+    <input type="text" id="titulo">
 
-    <label for=\"universidad_titulo\">Universidad del Título</label>
-    <input type=\"text\" id=\"universidad_titulo\">
+    <label for="universidad_titulo">Universidad del Título</label>
+    <input type="text" id="universidad_titulo">
 
-    <label for=\"virtualidad\">Porcentaje de virtualidad</label>
-    <input type=\"number\" id=\"virtualidad\" min=\"0\" max=\"100\">
+    <label for="virtualidad">Porcentaje de virtualidad</label>
+    <input type="number" id="virtualidad" min="0" max="100">
 
-    <button class=\"btn-interes\" onclick=\"predecir('interes')\">Predecir Interés</button>
-    <button class=\"btn-rango\" onclick=\"predecir('rango')\">Predecir Rango</button>
+    <button class="btn-interes" onclick="predecir('interes')">Predecir Interés</button>
+    <button class="btn-rango" onclick="predecir('rango')">Predecir Rango</button>
+    <button class="btn-area" onclick="predecir('area')">Predecir Área de Interés</button>
 
-    <div id=\"resultado\" class=\"resultado\"></div>
+    <div id="resultado" class="resultado"></div>
 </div>
 
 <script>
@@ -123,7 +136,14 @@ def get_ui():
             porcentaje_virtualidad: document.getElementById('virtualidad').value
         };
 
-        const endpoint = tipo === 'interes' ? '/predecir-interes' : '/predecir-rango';
+        let endpoint;
+        if (tipo === 'interes') {
+            endpoint = '/predecir-interes';
+        } else if (tipo === 'rango') {
+            endpoint = '/predecir-rango';
+        } else if (tipo === 'area') {
+            endpoint = '/predecir-area';
+        }
 
         try {
             const res = await fetch(endpoint, {
